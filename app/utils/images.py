@@ -19,6 +19,9 @@ from sanic.log import logger
 from .. import settings
 from ..models import Font, Template, Text
 from ..types import Align, Dimensions, FontType, ImageType, Offset, Point
+import subprocess
+import json
+import os
 
 EXCEPTIONS = (
     OSError,
@@ -64,7 +67,7 @@ def save(
     directory: Path = settings.IMAGES_DIRECTORY,
 ) -> Path:
     size = fit_image(*size)
-
+    
     path = directory / template.build_path(
         lines, font_name, style, size, watermark, extension, maximum_frames
     )
@@ -103,11 +106,11 @@ def save(
             lines,
             size,
             font_name,
-            maximum_frames or settings.MAXIMUM_FRAMES * 4,
+            settings.MAXIMUM_FRAMES,
             watermark=watermark,
         )
         count = len(frames)
-        fps = round(1 / duration * 1000, 2)
+        fps = get_webp_fps_ffprobe(os.path.join(template.directory,"default.webp"))
         logger.info(f"Saving {count} frames as WebP at {fps} frame/s")
         webp.save_images(frames, path, fps=fps, lossless=False)
     else:
@@ -311,7 +314,6 @@ def render_animation(
     watermark: str = "",
 ) -> tuple[list[ImageType], int]:
     frames = []
-
     pad = all(size) if pad is None else pad
     source = Image.open(template.get_image(style, animated=True))
     duration = source.info.get("duration", 100)
@@ -348,9 +350,6 @@ def render_animation(
         watermark = ""
 
     for index, frame in enumerate(sources):
-        if (index % modulus) >= 1:
-            continue
-
         stream = io.BytesIO()
         frame.save(stream, format="GIF")
         background = Image.open(stream).convert("RGBA")
@@ -422,14 +421,6 @@ def render_animation(
             image = add_counter(image, index, total, modulus, duration)
 
         frames.append(image)
-
-    if len(frames) > settings.MINIMUM_FRAMES:
-        ratio = len(frames) / max(total, settings.MAXIMUM_FRAMES)
-        old_duration = duration
-        duration = min(250, duration // ratio)
-        if duration != old_duration:
-            logger.info(f"Adjusted duration of {old_duration} to {duration}")
-
     return frames, duration
 
 
@@ -746,3 +737,16 @@ def get_text_size(text: str, font: FontType) -> Dimensions:
 
 def get_stroke_width(font: FontType) -> int:
     return min(3, max(1, font.size // 12))
+
+def get_webp_fps_ffprobe(webp_file):
+    cmd = ["ffprobe", "-v", "0", "-print_format", "json", "-show_streams", webp_file]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    data = json.loads(result.stdout)
+
+    for stream in data['streams']:
+        if stream['codec_type'] == 'video':
+            avg_fps = stream.get('avg_frame_rate')
+            if avg_fps:
+                # Extract FPS value as a float
+                return float(avg_fps.split('/')[0]) / float(avg_fps.split('/')[1])
+    return None
