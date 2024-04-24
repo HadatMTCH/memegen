@@ -6,7 +6,7 @@ FROM docker.io/python:3.12.2-bullseye as build
 
 # Install system dependencies
 RUN apt update && apt install --yes webp cmake ffmpeg
-RUN pip install poetry
+RUN pip install poetry wand
 
 # Create the memegen user
 RUN useradd -md /opt/memegen -u 1000 memegen

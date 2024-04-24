@@ -22,6 +22,7 @@ from ..types import Align, Dimensions, FontType, ImageType, Offset, Point
 import subprocess
 import json
 import os
+from wand.image import Image as ImageWand
 
 EXCEPTIONS = (
     OSError,
@@ -110,7 +111,7 @@ def save(
             watermark=watermark,
         )
         count = len(frames)
-        fps = get_webp_fps_ffprobe(os.path.join(template.directory,"default.webp"))
+        fps = get_webp_fps_wand(os.path.join(template.directory,"default.webp"))
         logger.info(f"Saving {count} frames as WebP at {fps} frame/s")
         webp.save_images(frames, path, fps=fps, lossless=False)
     else:
@@ -322,12 +323,12 @@ def render_animation(
         sources = ImageSequence.Iterator(source)
     elif template.animated_text:
         sources = [source] * settings.MAXIMUM_FRAMES  # type: ignore
-        duration = 250
+        # duration = 250
         total = settings.MAXIMUM_FRAMES
     elif sum(1 for line in lines if line.strip()) == 2:
         template.animate()
         sources = [source] * settings.MINIMUM_FRAMES  # type: ignore
-        duration = 1200
+        # duration = 1200
         total = settings.MINIMUM_FRAMES
     else:
         sources = [source]  # type: ignore
@@ -742,11 +743,15 @@ def get_webp_fps_ffprobe(webp_file):
     cmd = ["ffprobe", "-v", "0", "-print_format", "json", "-show_streams", webp_file]
     result = subprocess.run(cmd, capture_output=True, text=True)
     data = json.loads(result.stdout)
-
     for stream in data['streams']:
         if stream['codec_type'] == 'video':
             avg_fps = stream.get('avg_frame_rate')
             if avg_fps:
                 # Extract FPS value as a float
-                return float(avg_fps.split('/')[0]) / float(avg_fps.split('/')[1])
-    return None
+                return int(avg_fps.split('/')[0]) / int(avg_fps.split('/')[1])
+    return 30
+
+def get_webp_fps_wand(webp_file):
+    with ImageWand(filename=webp_file) as img:
+        total_duration = sum(frame.delay for frame in img.sequence) * 0.01  # Delay in centiseconds
+        return int(len(img.sequence) / total_duration)
