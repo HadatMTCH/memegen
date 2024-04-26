@@ -111,7 +111,11 @@ def save(
             watermark=watermark,
         )
         count = len(frames)
-        fps = get_webp_fps_wand(os.path.join(template.directory,"default.webp"))
+        isAnimationImage = Image.open(os.path.join(template.directory,"default.webp")).is_animated
+        if isAnimationImage:
+            fps = get_webp_fps_wand(os.path.join(template.directory,"default.webp"))
+        else:
+            fps = 1
         logger.info(f"Saving {count} frames as WebP at {fps} frame/s")
         webp.save_images(frames, path, fps=fps, lossless=False)
     else:
@@ -755,3 +759,7 @@ def get_webp_fps_wand(webp_file):
     with ImageWand(filename=webp_file) as img:
         total_duration = sum(frame.delay for frame in img.sequence) * 0.01  # Delay in centiseconds
         return int(len(img.sequence) / total_duration)
+    
+def is_animation(file):
+    image = Image.open(file)
+    return image.is_animated
