@@ -111,8 +111,8 @@ def save(
             watermark=watermark,
         )
         count = len(frames)
-        isAnimationImage = Image.open(template.get_image()).is_animated
-        if isAnimationImage:
+        isAnimationImage = Image.open(template.get_image())
+        if hasattr(isAnimationImage,'is_animated') and isAnimationImage.is_animated:
             fps = get_webp_fps_wand(template.get_image())
         else:
             fps = 1
